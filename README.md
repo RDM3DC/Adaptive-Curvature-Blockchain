@@ -1,4 +1,5 @@
 # Adaptive-Curvature-Coin
+pip install -r requirements.txt
 
 # Adaptive Curvature Coin (ACC)
 
