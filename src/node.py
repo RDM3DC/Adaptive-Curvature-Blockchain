@@ -1,6 +1,7 @@
-from adaptive_curvature import AdaptiveCurvature
-from blockchain import Blockchain, Block
+from .adaptive_curvature import AdaptiveCurvature
+from .blockchain import Blockchain, Block
 import time
+import numpy as np
 
 class Node:
     def __init__(self):
