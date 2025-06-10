@@ -14,6 +14,26 @@ class Block:
         block_string = f"{self.index}{self.previous_hash}{self.timestamp}{self.data}{self.nonce}"
         return hashlib.sha256(block_string.encode()).hexdigest()
 
+    def to_dict(self):
+        return {
+            'index': self.index,
+            'previous_hash': self.previous_hash,
+            'timestamp': self.timestamp,
+            'data': self.data,
+            'nonce': self.nonce,
+            'hash': self.hash
+        }
+
+    @classmethod
+    def from_dict(cls, block_dict):
+        return cls(
+            index=block_dict['index'],
+            previous_hash=block_dict['previous_hash'],
+            timestamp=block_dict['timestamp'],
+            data=block_dict['data'],
+            nonce=block_dict.get('nonce', 0)
+        )
+
 class Blockchain:
     def __init__(self):
         self.chain = [self.create_genesis_block()]
