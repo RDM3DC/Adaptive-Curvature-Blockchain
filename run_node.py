@@ -1,79 +1,87 @@
 from flask import Flask, jsonify, request
-from blockchain import Blockchain, Block
-from adaptive_curvature import AdaptiveCurvature
-import time
+from blockchain import Block, Blockchain
+from node import Node
+import argparse
 import requests
 
 app = Flask(__name__)
+node = Node()
+peers = set()
 
-blockchain = Blockchain()
-curvature = AdaptiveCurvature()
-nodes = set()
-
-@app.route('/mine_block', methods=['GET'])
-def mine_block():
-    latest_block = blockchain.get_latest_block()
-    complexity = np.random.uniform(1, 100)
-    curvature_value = curvature.update_curvature(np.random.uniform(0, complexity), complexity)
-    block_data = f"Block | Curvature: {curvature_value:.4f}"
-    new_block = Block(latest_block.index + 1, latest_block.hash, time.time(), block_data)
-    blockchain.add_block(new_block)
-
-    response = {
-        'message': 'New block mined successfully',
-        'index': new_block.index,
-        'data': new_block.data,
-        'hash': new_block.hash,
-        'previous_hash': new_block.previous_hash,
-        'timestamp': new_block.timestamp
-    }
-    return jsonify(response), 200
-
-@app.route('/get_chain', methods=['GET'])
-def get_chain():
-    response = {
-        'chain': [block.to_dict() for block in blockchain.chain],
-        'length': len(blockchain.chain)
-    }
-    return jsonify(response), 200
-
-@app.route('/register_node', methods=['POST'])
-def register_node():
-    json_data = request.get_json()
-    nodes_to_add = json_data.get('nodes', [])
-    for node in nodes_to_add:
-        nodes.add(node)
-    response = {
-        'message': 'Nodes added',
-        'total_nodes': list(nodes)
-    }
-    return jsonify(response), 201
-
-@app.route('/nodes', methods=['GET'])
-def get_nodes():
-    return jsonify({'nodes': list(nodes)}), 200
-
-@app.route('/consensus', methods=['GET'])
-def consensus():
-    global blockchain
-    longest_chain = blockchain.chain
-    max_length = len(longest_chain)
-
-    for node in nodes:
-        response = requests.get(f"{node}/get_chain")
-        if response.status_code == 200:
-            length = response.json()['length']
-            chain = response.json()['chain']
-            if length > max_length:
-                longest_chain = [Block.from_dict(b) for b in chain]
-                max_length = length
-
-    blockchain.chain = longest_chain
+@app.route("/status", methods=["GET"])
+def status():
     return jsonify({
-        'message': 'Chain updated',
-        'length': max_length,
-        'chain': [block.to_dict() for block in longest_chain]
+        "height": len(node.blockchain.chain),
+        "total_score": node.blockchain.total_score(),
+        "difficulty": node.tsp_pool.target_score,
+        "peers": list(peers)
     }), 200
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002)
+@app.route("/get_chain", methods=["GET"])
+def get_chain():
+    return jsonify({
+        "chain": [b.to_dict() for b in node.blockchain.chain],
+        "length": len(node.blockchain.chain),
+        "total_score": node.blockchain.total_score(),
+    }), 200
+
+@app.route("/register_node", methods=["POST"])
+def register_node():
+    data = request.get_json(force=True)
+    for url in data.get("nodes", []):
+        peers.add(url)
+    return jsonify({"message": "Peers added", "peers": list(peers)}), 201
+
+@app.route("/get_instance", methods=["POST"])
+def get_instance():
+    data = request.get_json(force=True) if request.data else {}
+    n = int(data.get("n", 30))
+    inst = node.tsp_pool.new_instance(n=n)
+    return jsonify({
+        "instance_id": inst.instance_id,
+        "points": inst.points
+    }), 201
+
+@app.route("/submit_poo_tsp", methods=["POST"])
+def submit_poo_tsp():
+    data = request.get_json(force=True)
+    instance_id = data.get("instance_id")
+    tour = data.get("tour")
+    if not instance_id or tour is None:
+        return jsonify({"error": "instance_id and tour required"}), 400
+
+    inst = node.tsp_pool.get(instance_id)
+    if inst is None:
+        return jsonify({"error": "unknown instance_id"}), 404
+
+    res = node.create_poo_block(inst, tour)
+    return jsonify(res), 200 if res.get("accepted") else 202
+
+@app.route("/consensus", methods=["GET"])
+def consensus():
+    global node
+    best_chain = node.blockchain
+    for url in peers:
+        try:
+            r = requests.get(f"{url}/get_chain", timeout=3)
+            if r.status_code == 200:
+                payload = r.json()
+                other = Blockchain()
+                other.chain = [Block.from_dict(b) for b in payload["chain"]]
+                best_chain = Blockchain.better_chain(best_chain, other)
+        except Exception as e:
+            print("Peer error:", e)
+
+    if best_chain is not node.blockchain:
+        node.blockchain = best_chain
+    return jsonify({
+        "message": "Consensus complete",
+        "height": len(node.blockchain.chain),
+        "total_score": node.blockchain.total_score()
+    }), 200
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=5002)
+    args = parser.parse_args()
+    app.run(host="0.0.0.0", port=args.port, debug=True)
