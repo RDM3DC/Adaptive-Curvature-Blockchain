@@ -1,6 +1,6 @@
-Adaptive‑Curvature‑Blockchain — Proof‑of‑Optimization (PoO) with TSP
+Adaptive‑Curvature‑Blockchain (ACB) — Proof‑of‑Optimization (PoO) with TSP
 
-ACC replaces wasteful Proof‑of‑Work with Proof‑of‑Optimization: miners earn blocks by submitting better solutions to real optimization problems.
+ACB replaces wasteful Proof‑of‑Work with Proof‑of‑Optimization: miners earn blocks by submitting better solutions to real optimization problems.
 This starter network uses the Traveling Salesman Problem (TSP) as the useful work and scores each block by how much the submitted tour improves over a baseline.
 •Consensus: chain with higher cumulative optimization score wins (tie → longer chain).
 •Difficulty: auto‑tunes (ARP‑style) based on recent success rate.
