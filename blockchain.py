@@ -51,6 +51,7 @@ class Block:
 class Blockchain:
     def __init__(self):
         self.chain: List[Block] = [self.create_genesis_block()]
+        self.pending_transactions: List[Dict[str, Any]] = []
 
     def create_genesis_block(self) -> Block:
         return Block(0, "0", time.time(), {"type": "genesis", "msg": "Genesis Block"})
@@ -62,6 +63,29 @@ class Blockchain:
         new_block.previous_hash = self.get_latest_block().hash
         new_block.hash = new_block.calculate_hash()
         self.chain.append(new_block)
+
+    def add_transaction(self, tx: Dict[str, Any]) -> int:
+        self.pending_transactions.append(tx)
+        return len(self.pending_transactions)
+
+    def pending_count(self) -> int:
+        return len(self.pending_transactions)
+
+    def mine_pending_transactions(self) -> Block:
+        data = {
+            "type": "tx_bundle",
+            "transactions": list(self.pending_transactions),
+            "count": len(self.pending_transactions),
+        }
+        new_block = Block(
+            self.get_latest_block().index + 1,
+            self.get_latest_block().hash,
+            time.time(),
+            data,
+        )
+        self.add_block(new_block)
+        self.pending_transactions = []
+        return new_block
 
     def total_score(self) -> float:
         s = 0.0
