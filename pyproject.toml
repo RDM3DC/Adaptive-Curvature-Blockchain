@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adaptive-curvature-blockchain"
+version = "0.1.0"
+description = "Proof-of-Optimization blockchain prototype using TSP-based useful work"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "RDM3DC" }
+]
+dependencies = [
+  "ecdsa",
+  "flask",
+  "gunicorn",
+  "numpy",
+  "requests",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "ruff>=0.11",
+]
+
+[tool.setuptools]
+py-modules = [
+  "blockchain",
+  "node",
+  "run_node",
+  "tsp_baselines",
+  "tsp_instances",
+  "tsp_verifier",
+]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"blockchain.py" = ["E501", "I001"]
+"node.py" = ["I001"]
+"run_node.py" = ["I001"]
+"tsp_baselines.py" = ["I001"]
+"tsp_instances.py" = ["E501"]
+"tsp_verifier.py" = ["I001"]
+"tests/test_adaptive_curvature.py" = ["I001"]
+"tests/test_blockchain_core.py" = ["E501"]
