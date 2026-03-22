@@ -1,263 +1,140 @@
-Adaptive‑Curvature‑Blockchain (ACB) — Proof‑of‑Optimization (PoO) with TSP
+# Adaptive-Curvature-Blockchain
 
-ACB replaces wasteful Proof‑of‑Work with Proof‑of‑Optimization: miners earn blocks by submitting better solutions to real optimization problems.
-This starter network uses the Traveling Salesman Problem (TSP) as the useful work and scores each block by how much the submitted tour improves over a baseline.
-•Consensus: chain with higher cumulative optimization score wins (tie → longer chain).
-•Difficulty: auto‑tunes (ARP‑style) based on recent success rate.
-•Verifier: recomputes TSP tour cost, checks validity (permutation of all cities).
+Adaptive-Curvature-Blockchain is a research prototype for proof-of-optimization consensus. Instead of proof-of-work, nodes score Traveling Salesman Problem submissions and mint blocks when a tour improves enough over a baseline heuristic.
 
-⸻
+## Project Purpose
 
-Features
-•🧠 Useful work: TSP tour improvements mint blocks (PoO‑TSP blocks).
-•⚖️ Scoring: score = (baseline_cost − cost) / baseline_cost ∈ [0, 1].
-•📈 Consensus: prefers higher total PoO score across the chain.
-•🛠️ Difficulty retarget: increases when solutions succeed, decreases when they fail.
-•🌐 Multi‑node: register peers and run /consensus to converge on the best chain.
-•🔌 Pluggable solver: bring your own TSP solver; the node only verifies and scores.
+- Demonstrate a simple useful-work blockchain loop
+- Compare chains by cumulative optimization score instead of pure length
+- Explore ARP-style difficulty retargeting around solver success rate
 
-⸻
+This repository is currently a small script-first prototype, not a production blockchain implementation.
 
-Repo Layout
+## What It Does Today
 
-.
-├── blockchain.py         # Block + Blockchain (score-aware consensus comparator)
-├── node.py               # Node, TSP pool, difficulty retarget, block creation
-├── run_node.py           # Flask API server (endpoints below)
-├── tsp_instances.py      # Random Euclidean TSP instance generator + cost
-├── tsp_baselines.py      # Baseline tour (Nearest Neighbor)
-├── tsp_verifier.py       # Tour validation + scoring against baseline
-└── requirements.txt      # flask, requests, numpy
+- Generates Euclidean TSP instances
+- Scores submitted tours against a nearest-neighbor baseline
+- Mints `PoO-TSP` blocks when score meets the current target
+- Retargets the acceptance threshold after success or failure
+- Exposes a Flask HTTP API for local experiments
+- Resolves consensus by higher total score, then longer chain
 
-⸻
+## Repository Layout
 
-Quickstart
-
-1) Install
-
+```text
+blockchain.py      Core block and chain logic
+node.py            Node state, TSP pool, difficulty retargeting
+run_node.py        Flask API entry point
+tsp_instances.py   Random TSP instance generation and cost evaluation
+tsp_baselines.py   Baseline nearest-neighbor solver
+tsp_verifier.py    Tour validation and score computation
+src/               Small reusable experiment modules
+tests/             Unit and smoke tests
 ```
+
+## Install
+
+```powershell
 python -m venv .venv
-source .venv/bin/activate        # or: .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .[dev]
 ```
 
-2) Run a node
+If you prefer the legacy path, `pip install -r requirements.txt` still works for runtime dependencies.
 
-```
+## Run
+
+Start a node:
+
+```powershell
 python run_node.py --port 5002
 ```
 
-Optional: run a second node as a peer:
+Start a second node:
 
-```
+```powershell
 python run_node.py --port 5003
 ```
 
-Register peers (from 5002, add 5003):
+Register the peer from the first node:
 
-```
-curl -X POST http://localhost:5002/register_node \
-  -H "Content-Type: application/json" \
-  -d '{"nodes": ["http://localhost:5003"]}'
+```powershell
+curl -X POST http://localhost:5002/register_node -H "Content-Type: application/json" -d '{"nodes": ["http://localhost:5003"]}'
 ```
 
-⸻
+## Test and Lint
 
-API
-
-GET /status
-
-Node health + difficulty.
-
-Response
-
-```
-{
-  "height": 1,
-  "total_score": 0.0,
-  "difficulty": 0.02,
-  "peers": ["http://localhost:5003"]
-}
+```powershell
+pytest
+ruff check blockchain.py node.py run_node.py tsp_baselines.py tsp_instances.py tsp_verifier.py tests/test_adaptive_curvature.py tests/test_blockchain_core.py
 ```
 
-⸻
+## Dependencies
 
-GET /get_chain
+- `flask` for the HTTP API
+- `requests` for peer consensus calls
+- `numpy` for numeric utilities used elsewhere in the repo
+- `ecdsa` and `gunicorn` for related runtime/deployment experiments already referenced by the project
 
-Full chain + cumulative score.
+## API Overview
 
-Response
+- `GET /status` returns current height, total score, difficulty, pending transactions, and peers
+- `GET /get_chain` returns the full chain and cumulative score
+- `POST /get_instance` creates a new random TSP instance
+- `POST /submit_poo_tsp` validates and scores a tour submission
+- `POST /register_node` registers peers for consensus
+- `GET /consensus` adopts the better peer chain
+- `POST /add_transaction` and `GET /mine_block` support the transaction bundle path used by related experiments
 
-```
-{
-  "chain": [ { "index": 0, "data": {"type": "genesis", "msg": "Genesis Block"}, "...": "..." } ],
-  "length": 1,
-  "total_score": 0.0
-}
-```
+## Minimal Example
 
-⸻
-
-POST /get_instance
-
-Create a new TSP instance.
-
-Body
-
-```
-{ "n": 30 }   // optional (default 30)
-```
-
-Response
-
-```
-{
-  "instance_id": "rand-30-123456789",
-  "points": [[0.12,0.90],[0.55,0.48], ...]   // n pairs in [0,1]^2
-}
-```
-
-⸻
-
-POST /submit_poo_tsp
-
-Submit a tour for scoring and block minting.
-
-Body
-
-```
-{
-  "instance_id": "rand-30-123456789",
-  "tour": [0, 1, 2, ..., 29]   // permutation of 0..n-1
-}
-```
-
-202 Accepted (below target)
-
-```
-{
-  "accepted": false,
-  "reason": "Score 0.0123 below target 0.0200",
-  "payload": {
-    "type": "PoO-TSP",
-    "instance_id": "rand-30-123456789",
-    "n": 30,
-    "cost": 4.321,
-    "baseline_cost": 4.374,
-    "delta": 0.053,
-    "score": 0.0121,
-    "difficulty": 0.02,
-    "accepted_at": 1723500000.123
-  }
-}
-```
-
-200 OK (minted block)
-
-```
-{
-  "accepted": true,
-  "block": {
-    "index": 1,
-    "previous_hash": "...",
-    "timestamp": 1723500123.456,
-    "data": {
-      "type": "PoO-TSP",
-      "instance_id": "rand-30-123456789",
-      "n": 30,
-      "tour": [ ... ],
-      "cost": 4.200,
-      "baseline_cost": 4.374,
-      "delta": 0.174,
-      "score": 0.0398,
-      "difficulty": 0.0209,
-      "accepted_at": 1723500123.450
-    },
-    "nonce": 0,
-    "hash": "..."
-  }
-}
-```
-
-⸻
-
-GET /consensus
-
-Fetch peers’ chains and adopt the best one:
-1.Higher total PoO score
-2.Tie‑break by length
-
-Response
-
-```
-{
-  "message": "Consensus complete",
-  "height": 5,
-  "total_score": 0.124
-}
-```
-
-⸻
-
-Minimal Client Example (Python)
-
-This script:
-1.Gets an instance
-2.Builds a naive tour (Nearest Neighbor example logic)
-3.Submits it for scoring
-
-Tip: Replace build_tour(points) with your advanced solver to mint blocks reliably.
-
-```
-import requests, math, random
+```python
+import math
+import requests
 
 NODE = "http://localhost:5002"
 
+
 def build_tour(points):
-    n = len(points)
-    remaining = set(range(n))
+    remaining = set(range(len(points)))
     tour = [0]
     remaining.remove(0)
+    current = 0
 
-    def dist(i, j):
+    def distance(i, j):
         (x1, y1), (x2, y2) = points[i], points[j]
         return math.hypot(x1 - x2, y1 - y2)
 
-    cur = 0
     while remaining:
-        nxt = min(remaining, key=lambda j: dist(cur, j))
+        nxt = min(remaining, key=lambda j: distance(current, j))
         tour.append(nxt)
         remaining.remove(nxt)
-        cur = nxt
+        current = nxt
     return tour
 
-# 1) get an instance
-r = requests.post(f"{NODE}/get_instance", json={"n": 30})
-inst = r.json()
-instance_id, points = inst["instance_id"], inst["points"]
 
-# 2) build a tour with your solver
-tour = build_tour(points)
-
-# 3) submit
-resp = requests.post(f"{NODE}/submit_poo_tsp", json={"instance_id": instance_id, "tour": tour})
-print(resp.status_code, resp.json())
+instance = requests.post(f"{NODE}/get_instance", json={"n": 30}).json()
+tour = build_tour(instance["points"])
+response = requests.post(
+    f"{NODE}/submit_poo_tsp",
+    json={"instance_id": instance["instance_id"], "tour": tour},
+)
+print(response.status_code, response.json())
 ```
 
-⸻
+## Current Limitations
 
-Difficulty Retargeting (ARP‑style)
-•Success (block minted): increase target score by ~5% (harder).
-•Fail (below target): decrease target score by ~5% (easier).
-•Clamp: [0.005, 0.20] to keep tasks feasible.
+- Consensus is a prototype and does not include adversarial-network protections
+- Blocks are not proof-of-work mined; `nonce` is effectively inert
+- Persistence is in-memory only; restarting a node resets chain state
+- TSP scoring is deterministic but intentionally simplistic
+- There is no packaging split between the script entry points and the experimental `src` module namespace yet
+- This repo should be treated as research code, not production infrastructure
 
-This keeps throughput steady while encouraging meaningful improvements.
+## License
 
-⸻
-
-Bring Your Own Solver
-
-The node is solver‑agnostic: it verifies and scores submissions.
+This repository is released under the [MIT License](LICENSE).
 Use any method (heuristics, NH‑ARP, Curve‑Memory, LKH, SA/GA, RL/LLM, etc.).
 Higher improvement → higher block score → stronger chain.
 
